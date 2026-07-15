@@ -1,10 +1,21 @@
 import { NextResponse } from 'next/server';
-import { updateParticipantePagamento } from '@/lib/sheets';
+import { updateParticipanteEmail, updateParticipantePagamento } from '@/lib/sheets';
 
 export async function PATCH(request: Request) {
   try {
-    const { rowNumber, statusPagamento, dataPagamento } = await request.json();
-    if (!rowNumber || !statusPagamento) {
+    const body = await request.json();
+    const { rowNumber } = body;
+    if (!rowNumber) {
+      return NextResponse.json({ error: 'Dados incompletos.' }, { status: 400 });
+    }
+
+    if (typeof body.email === 'string') {
+      await updateParticipanteEmail(Number(rowNumber), body.email.trim());
+      return NextResponse.json({ ok: true });
+    }
+
+    const { statusPagamento, dataPagamento } = body;
+    if (!statusPagamento) {
       return NextResponse.json({ error: 'Dados incompletos.' }, { status: 400 });
     }
     await updateParticipantePagamento(Number(rowNumber), String(statusPagamento), String(dataPagamento || ''));

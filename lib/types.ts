@@ -4,6 +4,8 @@ export type Participante = {
   valorIndividual: number;
   statusPagamento: string;
   dataPagamento: string;
+  email: string;
+  estagiario: boolean;
 };
 
 export type Rateio = {
@@ -19,4 +21,6 @@ export type Rateio = {
 export type NovoParticipante = {
   pessoa: string;
   valorIndividual: number;
+  email: string;
+  estagiario: boolean;
 };

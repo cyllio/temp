@@ -2,7 +2,7 @@ import { google } from 'googleapis';
 import type { NovoParticipante, Rateio } from './types';
 
 const SHEET_NAME = process.env.GOOGLE_SHEET_TAB || 'Sheet1';
-const DATA_RANGE = `${SHEET_NAME}!A2:I`;
+const DATA_RANGE = `${SHEET_NAME}!A2:K`;
 
 function getAuth() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -87,6 +87,8 @@ export async function fetchRateios(): Promise<Rateio[]> {
     const chavePix = normalizeTexto(row[6]);
     const statusPagamento = normalizeTexto(row[7]) || 'Pendente';
     const dataPagamento = normalizeDate(row[8]);
+    const email = normalizeTexto(row[9]);
+    const estagiario = normalizeTexto(row[10]).toLowerCase() === 'sim';
 
     if (!pessoa) return;
 
@@ -108,6 +110,8 @@ export async function fetchRateios(): Promise<Rateio[]> {
       valorIndividual,
       statusPagamento,
       dataPagamento,
+      email,
+      estagiario,
     });
   });
 
@@ -125,6 +129,16 @@ export async function updateParticipantePagamento(
     range: `${SHEET_NAME}!H${rowNumber}:I${rowNumber}`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [[statusPagamento, dataPagamento]] },
+  });
+}
+
+export async function updateParticipanteEmail(rowNumber: number, email: string) {
+  const sheets = getSheetsClient();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: getSpreadsheetId(),
+    range: `${SHEET_NAME}!J${rowNumber}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[email]] },
   });
 }
 
@@ -147,6 +161,8 @@ export async function criarRateio(params: {
     params.chavePix,
     'Pendente',
     '',
+    p.email || '',
+    p.estagiario ? 'Sim' : 'Não',
   ]);
   await sheets.spreadsheets.values.append({
     spreadsheetId: getSpreadsheetId(),

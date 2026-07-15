@@ -50,6 +50,8 @@ export async function POST(request: Request) {
       participantes: participantes.map((p: any) => ({
         pessoa: String(p.pessoa).trim(),
         valorIndividual: Number(p.valorIndividual),
+        email: typeof p.email === 'string' ? p.email.trim() : '',
+        estagiario: Boolean(p.estagiario),
       })),
     });
 

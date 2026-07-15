@@ -14,6 +14,8 @@ export default function Home() {
   const [busca, setBusca] = useState('');
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>('todos');
   const [savingRow, setSavingRow] = useState<number | null>(null);
+  const [enviandoEmail, setEnviandoEmail] = useState(false);
+  const [emailFeedback, setEmailFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     load();
@@ -108,6 +110,70 @@ export default function Home() {
       load();
     } finally {
       setSavingRow(null);
+    }
+  }
+
+  function alterarEmailLocal(rowNumber: number, email: string) {
+    setRateios((prev) =>
+      prev.map((r) => ({
+        ...r,
+        participantes: r.participantes.map((p) => (p.rowNumber === rowNumber ? { ...p, email } : p)),
+      }))
+    );
+  }
+
+  async function salvarEmail(rowNumber: number, email: string) {
+    setSavingRow(rowNumber);
+    try {
+      const res = await fetch('/api/participante', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rowNumber, email }),
+      });
+      if (!res.ok) throw new Error('Falha ao salvar.');
+    } catch {
+      load();
+    } finally {
+      setSavingRow(null);
+    }
+  }
+
+  async function enviarEmails() {
+    if (!atual) return;
+    const pendentesComEmail = atual.participantes.filter(
+      (p) => p.statusPagamento.toLowerCase() !== 'pago' && p.email.trim()
+    );
+    if (pendentesComEmail.length === 0) {
+      setEmailFeedback('Nenhum participante pendente com e-mail cadastrado.');
+      return;
+    }
+    if (!confirm(`Enviar cobrança por e-mail para ${pendentesComEmail.length} participante(s) pendente(s)?`)) {
+      return;
+    }
+    setEnviandoEmail(true);
+    setEmailFeedback(null);
+    try {
+      const res = await fetch('/api/enviar-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assunto: atual.assunto,
+          chavePix: atual.chavePix,
+          participantes: atual.participantes.map((p) => ({
+            pessoa: p.pessoa,
+            email: p.email,
+            valorIndividual: p.valorIndividual,
+            statusPagamento: p.statusPagamento,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao enviar e-mails.');
+      setEmailFeedback(`E-mails enviados para ${data.enviados} participante(s).`);
+    } catch (err) {
+      setEmailFeedback(err instanceof Error ? err.message : 'Erro desconhecido.');
+    } finally {
+      setEnviandoEmail(false);
     }
   }
 
@@ -209,15 +275,29 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="mb-3 text-sm text-slate-500">
-              {atual.participantes.filter((p) => p.statusPagamento.toLowerCase() === 'pago').length} de{' '}
-              {atual.participantes.length} pagaram
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm text-slate-500">
+                {atual.participantes.filter((p) => p.statusPagamento.toLowerCase() === 'pago').length} de{' '}
+                {atual.participantes.length} pagaram
+              </div>
+              <button
+                onClick={enviarEmails}
+                disabled={enviandoEmail}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-40"
+              >
+                {enviandoEmail ? 'Enviando…' : 'Enviar e-mail aos pendentes'}
+              </button>
             </div>
+
+            {emailFeedback && (
+              <div className="mb-3 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">{emailFeedback}</div>
+            )}
 
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-slate-500">
                   <th className="py-2">Pessoa</th>
+                  <th className="py-2">E-mail</th>
                   <th className="py-2">Valor</th>
                   <th className="py-2">Pago</th>
                   <th className="py-2">Data pagamento</th>
@@ -229,6 +309,17 @@ export default function Home() {
                   return (
                     <tr key={p.rowNumber} className="border-b border-slate-100">
                       <td className="py-2">{p.pessoa}</td>
+                      <td className="py-2">
+                        <input
+                          type="email"
+                          value={p.email || ''}
+                          placeholder="email@exemplo.com"
+                          onChange={(e) => alterarEmailLocal(p.rowNumber, e.target.value)}
+                          onBlur={(e) => salvarEmail(p.rowNumber, e.target.value)}
+                          disabled={savingRow === p.rowNumber}
+                          className="w-40 rounded border border-slate-300 px-2 py-1 text-sm disabled:opacity-40"
+                        />
+                      </td>
                       <td className="py-2">R$ {p.valorIndividual.toFixed(2)}</td>
                       <td className="py-2">
                         <input
@@ -252,7 +343,7 @@ export default function Home() {
                 })}
                 {participantesVisiveis.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-4 text-center text-slate-400">
+                    <td colSpan={5} className="py-4 text-center text-slate-400">
                       Nenhum participante para esse filtro de status.
                     </td>
                   </tr>

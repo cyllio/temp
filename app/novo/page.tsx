@@ -7,6 +7,8 @@ import type { Rateio } from '@/lib/types';
 type LinhaParticipante = {
   key: string;
   pessoa: string;
+  email: string;
+  estagiario: boolean;
   percentual: number;
   valor: number;
 };
@@ -50,6 +52,8 @@ function NovoRateioForm() {
             encontrado.participantes.map((p) => ({
               key: novaChave(),
               pessoa: p.pessoa,
+              email: p.email || '',
+              estagiario: p.estagiario || false,
               percentual:
                 encontrado.valorTotalRateio > 0 ? (p.valorIndividual / encontrado.valorTotalRateio) * 100 : 0,
               valor: p.valorIndividual,
@@ -65,7 +69,10 @@ function NovoRateioForm() {
   }, [fromId]);
 
   function adicionarParticipante() {
-    setLinhas((prev) => [...prev, { key: novaChave(), pessoa: '', percentual: 0, valor: 0 }]);
+    setLinhas((prev) => [
+      ...prev,
+      { key: novaChave(), pessoa: '', email: '', estagiario: false, percentual: 0, valor: 0 },
+    ]);
   }
 
   function removerParticipante(key: string) {
@@ -93,6 +100,31 @@ function NovoRateioForm() {
     setLinhas((prev) => prev.map((l) => (l.key === key ? { ...l, pessoa } : l)));
   }
 
+  function atualizarEmail(key: string, email: string) {
+    setLinhas((prev) => prev.map((l) => (l.key === key ? { ...l, email } : l)));
+  }
+
+  function atualizarEstagiario(key: string, estagiario: boolean) {
+    setLinhas((prev) => prev.map((l) => (l.key === key ? { ...l, estagiario } : l)));
+  }
+
+  // Redistribui o valor total entre os participantes: todos os colaboradores pagam o
+  // mesmo valor (inclusive a Paula), e cada estagiário paga metade do valor de um colaborador.
+  function redistribuir() {
+    if (valorTotal <= 0 || linhas.length === 0) return;
+    const nEstagiarios = linhas.filter((l) => l.estagiario).length;
+    const nColaboradores = linhas.length - nEstagiarios;
+    const unidades = nColaboradores + nEstagiarios * 0.5;
+    if (unidades <= 0) return;
+    const valorColaborador = valorTotal / unidades;
+    setLinhas((prev) =>
+      prev.map((l) => {
+        const valor = l.estagiario ? valorColaborador / 2 : valorColaborador;
+        return { ...l, valor, percentual: (valor / valorTotal) * 100 };
+      })
+    );
+  }
+
   const somaValores = useMemo(() => linhas.reduce((acc, l) => acc + (Number(l.valor) || 0), 0), [linhas]);
   const somaPercentuais = useMemo(() => linhas.reduce((acc, l) => acc + (Number(l.percentual) || 0), 0), [linhas]);
   const diferenca = Math.abs(somaValores - valorTotal);
@@ -115,6 +147,8 @@ function NovoRateioForm() {
           valorTotalRateio: valorTotal,
           participantes: linhas.map((l) => ({
             pessoa: l.pessoa.trim(),
+            email: l.email.trim(),
+            estagiario: l.estagiario,
             valorIndividual: Number(l.valor.toFixed(2)),
           })),
         }),
@@ -144,7 +178,7 @@ function NovoRateioForm() {
 
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="text-sm">
-          Assunto / Homenageado
+          Assunto / Aniversariante
           <input
             value={assunto}
             onChange={(e) => setAssunto(e.target.value)}
@@ -188,20 +222,32 @@ function NovoRateioForm() {
         </label>
       </div>
 
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="font-medium">Participantes</h2>
-        <button
-          onClick={adicionarParticipante}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-        >
-          + Adicionar participante
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={redistribuir}
+            disabled={valorTotal <= 0 || linhas.length === 0}
+            title="Recalcula os valores: colaboradores pagam igual, estagiários pagam metade"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-40"
+          >
+            Redistribuir
+          </button>
+          <button
+            onClick={adicionarParticipante}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+          >
+            + Adicionar participante
+          </button>
+        </div>
       </div>
 
       <table className="mb-4 w-full text-sm">
         <thead>
           <tr className="border-b border-slate-200 text-left text-slate-500">
             <th className="py-2">Nome</th>
+            <th className="py-2">E-mail</th>
+            <th className="py-2">Estagiário</th>
             <th className="py-2">%</th>
             <th className="py-2">Valor (R$)</th>
             <th className="py-2"></th>
@@ -216,6 +262,22 @@ function NovoRateioForm() {
                   onChange={(e) => atualizarNome(l.key, e.target.value)}
                   className="w-full rounded border border-slate-300 px-2 py-1"
                   placeholder="Nome"
+                />
+              </td>
+              <td className="py-1.5 pr-2">
+                <input
+                  type="email"
+                  value={l.email}
+                  onChange={(e) => atualizarEmail(l.key, e.target.value)}
+                  className="w-40 rounded border border-slate-300 px-2 py-1"
+                  placeholder="email@exemplo.com"
+                />
+              </td>
+              <td className="py-1.5 pr-2 text-center">
+                <input
+                  type="checkbox"
+                  checked={l.estagiario}
+                  onChange={(e) => atualizarEstagiario(l.key, e.target.checked)}
                 />
               </td>
               <td className="py-1.5 pr-2">
@@ -245,7 +307,7 @@ function NovoRateioForm() {
           ))}
           {linhas.length === 0 && (
             <tr>
-              <td colSpan={4} className="py-4 text-center text-slate-400">
+              <td colSpan={6} className="py-4 text-center text-slate-400">
                 Nenhum participante ainda. Adicione um acima.
               </td>
             </tr>
@@ -259,7 +321,7 @@ function NovoRateioForm() {
         }`}
       >
         Soma dos valores: R$ {somaValores.toFixed(2)} de R$ {valorTotal.toFixed(2)} ({somaPercentuais.toFixed(1)}%)
-        {!totalValido && ' — ajuste os valores ou percentuais para que a soma bata com o total antes de salvar.'}
+        {!totalValido && ' — ajuste os valores ou percentuais (ou clique em Redistribuir) para que a soma bata com o total antes de salvar.'}
       </div>
 
       <button
